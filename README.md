@@ -74,6 +74,12 @@ O admin padrão é criado automaticamente no primeiro startup se não existir ne
 | POST | `/api/products` | ADMIN | Criar produto |
 | GET | `/api/products/{id}/reviews` | — | Avaliações do produto |
 | POST | `/api/products/{id}/reviews` | CUSTOMER | Avaliar produto (requer pedido aprovado) |
+| GET | `/api/cart` | AUTH | Obter o carrinho do usuário autenticado |
+| POST | `/api/cart/items` | AUTH | Adicionar ou atualizar quantidade de um item no carrinho |
+| PATCH | `/api/cart/items/{productId}` | AUTH | Atualizar diretamente a quantidade de um produto específico |
+| DELETE | `/api/cart/items/{productId}` | AUTH | Remover um produto do carrinho |
+| DELETE | `/api/cart` | AUTH | Esvaziar o carrinho por completo |
+| GET | `/api/cart/user/{userId}` | ADMIN | Obter o carrinho de qualquer usuário (Apenas Admin) |
 | POST | `/api/orders` | CUSTOMER | Finalizar compra |
 | GET | `/api/orders/my` | CUSTOMER | Histórico de pedidos |
 | GET | `/api/orders` | ADMIN | Todos os pedidos com filtros |
