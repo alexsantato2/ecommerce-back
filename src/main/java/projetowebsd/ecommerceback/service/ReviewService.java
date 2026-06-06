@@ -7,8 +7,10 @@ import projetowebsd.ecommerceback.dto.review.ReviewRequestDTO;
 import projetowebsd.ecommerceback.dto.review.ReviewResponseDTO;
 import projetowebsd.ecommerceback.exception.BusinessException;
 import projetowebsd.ecommerceback.model.Review;
+import projetowebsd.ecommerceback.model.Product;
 import projetowebsd.ecommerceback.model.User;
 import projetowebsd.ecommerceback.repository.OrderRepository;
+import projetowebsd.ecommerceback.repository.ProductRepository;
 import projetowebsd.ecommerceback.repository.ReviewRepository;
 import projetowebsd.ecommerceback.repository.UserRepository;
 
@@ -23,6 +25,7 @@ public class ReviewService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final ProductService productService;
+    private final ProductRepository productRepository;
 
     public List<ReviewResponseDTO> listByProduct(UUID productId) {
         return reviewRepository.findByProductIdOrderByCreatedAtDesc(productId)
@@ -36,21 +39,66 @@ public class ReviewService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new BusinessException("Usuário não encontrado"));
 
-        if (!orderRepository.existsApprovedOrderWithProduct(user.getId(), productId)) {
+        boolean temPedidoAprovado = orderRepository.existsApprovedOrderWithProduct(user.getId(), productId);
+
+        if (!temPedidoAprovado) {
             throw new BusinessException("Só é possível avaliar produtos de pedidos aprovados");
         }
 
-        if (reviewRepository.existsByUserIdAndProductId(user.getId(), productId)) {
-            throw new BusinessException("Você já avaliou este produto");
+        boolean jaAvaliou = reviewRepository.existsByUserIdAndProductId(user.getId(), productId);
+
+        Review review;
+
+        if (jaAvaliou) {
+            review = reviewRepository.findByUserIdAndProductId(user.getId(), productId)
+                    .orElseThrow(() -> new BusinessException("Erro ao recuperar a avaliação existente"));
+
+            review.setRating(request.rating());
+            review.setComment(request.comment());
+        } else {
+            review = Review.builder()
+                    // Aqui você pode usar o productRepository.findById caso não queira depender do productService
+                    .product(productRepository.findById(productId).orElseThrow(() -> new BusinessException("Produto não encontrado")))
+                    .user(user)
+                    .rating(request.rating())
+                    .comment(request.comment())
+                    .build();
         }
 
-        Review review = Review.builder()
-                .product(productService.getProduct(productId))
-                .user(user)
-                .rating(request.rating())
-                .comment(request.comment())
-                .build();
+        // Salva a review (seja nova ou update)
+        Review reviewSalva = reviewRepository.save(review);
 
-        return ReviewResponseDTO.from(reviewRepository.save(review));
+        // 🚀 RECALCULA E ATUALIZA A MÉDIA NO PRODUTO:
+        atualizarMediaDoProduto(productId);
+
+        return ReviewResponseDTO.from(reviewSalva);
+    }
+
+    // 💡 Adicione este método na sua classe ReviewService
+    private void atualizarMediaDoProduto(UUID productId) {
+        // Usa as queries prontas que você já tem no seu ReviewRepository!
+        Double novaMedia = reviewRepository.findAverageRatingByProductId(productId);
+        long novaQuantidade = reviewRepository.countByProductId(productId);
+
+        // Evita salvar nulo se não houver notas
+        if (novaMedia == null) {
+            novaMedia = 0.0;
+        }
+
+        // Busca o produto correspondente na tabela de produtos
+        projetowebsd.ecommerceback.model.Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException("Produto não encontrado"));
+
+        // Atualiza os campos de cache de nota do produto
+        product.setAverageRating(novaMedia);
+        product.setReviewCount((int) novaQuantidade);
+
+        // Salva o produto atualizado no banco
+        productRepository.save(product);
+    }
+
+    public boolean hasUserReviewedProduct(UUID productId, String email) {
+        // Aqui você verifica se existe alguma avaliação com o productId E o email/username do usuário
+        return reviewRepository.existsByProductIdAndUserEmail(productId, email);
     }
 }

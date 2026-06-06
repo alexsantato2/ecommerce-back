@@ -31,6 +31,19 @@ public class ReviewController {
         return ResponseEntity.ok(reviewService.listByProduct(productId));
     }
 
+    @GetMapping("/check")
+    @Operation(summary = "Verifica se o usuário logado já avaliou este produto",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<Boolean> checkIfUserReviewed(
+            @PathVariable UUID productId,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        // userDetails.getUsername() geralmente traz o email ou login do JWT
+        boolean hasReviewed = reviewService.hasUserReviewedProduct(productId, userDetails.getUsername());
+        return ResponseEntity.ok(hasReviewed);
+    }
+
+
     @PostMapping
     @Operation(summary = "Avaliar um produto (apenas clientes com pedido aprovado)",
                security = @SecurityRequirement(name = "bearerAuth"))

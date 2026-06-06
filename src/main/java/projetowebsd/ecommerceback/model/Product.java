@@ -44,6 +44,12 @@ public class Product {
     @Builder.Default
     private Boolean active = true;
 
+    @Builder.Default
+    private Double averageRating = 0.0;
+
+    @Builder.Default
+    private Integer reviewCount = 0;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

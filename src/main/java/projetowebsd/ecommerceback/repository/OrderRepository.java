@@ -17,6 +17,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
 
     long countByStatus(OrderStatus status);
 
-    @Query("SELECT COUNT(oi) > 0 FROM OrderItem oi WHERE oi.order.user.id = :userId AND oi.product.id = :productId AND oi.order.status = 'APPROVED'")
+    @Query("SELECT COUNT(oi) > 0 FROM OrderItem oi " +
+            "WHERE oi.order.user.id = :userId " +
+            "AND oi.product.id = :productId " +
+            "AND oi.order.status = projetowebsd.ecommerceback.model.enums.OrderStatus.APPROVED")
     boolean existsApprovedOrderWithProduct(@Param("userId") UUID userId, @Param("productId") UUID productId);
 }
