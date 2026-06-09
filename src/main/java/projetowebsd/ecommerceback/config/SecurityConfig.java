@@ -46,6 +46,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/carousels").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/carousels", "/api/carousels/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/carousels", "/api/carousels/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/cart/user/**").hasRole("ADMIN")
                         .requestMatchers("/api/cart", "/api/cart/items", "/api/cart/items/**").hasAnyRole("CUSTOMER", "ADMIN") // Garan
                         .requestMatchers("/api/cart/**").authenticated()
