@@ -7,8 +7,7 @@ import java.util.UUID;
 public record MoveDTO(
         @Schema(description = "ID do item que está sendo movido")
         UUID id,
-        @Schema(description = "Posição do elemento que ficou ANTES dele (null se virou o primeiro)")
-        Integer positionBefore,
-        @Schema(description = "Posição do elemento que ficou DEPOIS dele (null se virou o último)")
-        Integer positionAfter
+
+        @Schema(description = "Nova posição desejada para o item (baseada em índice 0)", example = "2")
+        Integer targetPosition
 ) {}

@@ -44,14 +44,14 @@ public class CarouselController {
     @PatchMapping("/move")
     @Operation(summary = "Mudar posição global do carrossel na Home", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<Void> moveCarousel(@Valid @RequestBody MoveDTO request) {
-        carouselService.moveCarousel(request);
+        carouselService.moveCarousel(request.id(), request.targetPosition());
         return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/products/move")
     @Operation(summary = "Mudar a posição de um produto dentro do carrossel", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<Void> moveProductInCarousel(@PathVariable UUID id, @Valid @RequestBody MoveDTO request) {
-        carouselService.moveProductInCarousel(id, request);
+        carouselService.moveProductInCarousel(id, request.id(), request.targetPosition());
         return ResponseEntity.noContent().build();
     }
 }

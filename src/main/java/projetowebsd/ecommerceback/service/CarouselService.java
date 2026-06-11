@@ -21,8 +21,6 @@ public class CarouselService {
     private final ProductService productService;
     private final ReviewRepository reviewRepository;
 
-    private static final int GAP = 1000;
-
     @Transactional(readOnly = true)
     public List<CarouselResponseDTO> listAll() {
         return carouselRepository.findAllByOrderByPositionAsc().stream()
@@ -33,13 +31,11 @@ public class CarouselService {
     @CacheEvict(value = "products", allEntries = true)
     @Transactional
     public CarouselResponseDTO create(CarouselRequestDTO request) {
-        // Pega o último carrossel para colocar o novo no fim da fila
-        List<Carousel> existing = carouselRepository.findAllByOrderByPositionAsc();
-        int nextPos = existing.isEmpty() ? GAP : existing.get(existing.size() - 1).getPosition() + GAP;
+        long count = carouselRepository.count();
 
         Carousel carousel = Carousel.builder()
                 .name(request.name())
-                .position(nextPos)
+                .position((int) count)
                 .build();
 
         return CarouselResponseDTO.from(carouselRepository.save(carousel), reviewRepository);
@@ -52,13 +48,12 @@ public class CarouselService {
                 .orElseThrow(() -> new ResourceNotFoundException("Carrossel não encontrado"));
         Product product = productService.getProduct(productId);
 
-        List<CarouselProduct> currentItems = carouselProductRepository.findAllByCarouselIdOrderByPositionAsc(carouselId);
-        int nextPos = currentItems.isEmpty() ? GAP : currentItems.get(currentItems.size() - 1).getPosition() + GAP;
+        long count = carouselProductRepository.countByCarouselId(carouselId);
 
         CarouselProduct relation = CarouselProduct.builder()
                 .carousel(carousel)
                 .product(product)
-                .position(nextPos)
+                .position((int) count)
                 .build();
 
         carouselProductRepository.save(relation);
@@ -66,69 +61,71 @@ public class CarouselService {
 
     @CacheEvict(value = "products", allEntries = true)
     @Transactional
-    public void moveCarousel(MoveDTO move) {
-        Carousel carousel = carouselRepository.findById(move.id())
+    public void moveCarousel(UUID carouselId, int targetPosition) {
+        Carousel carouselToMove = carouselRepository.findById(carouselId)
                 .orElseThrow(() -> new ResourceNotFoundException("Carrossel não encontrado"));
 
-        int newPos = calculateNewPosition(move.positionBefore(), move.positionAfter());
+        int currentPosition = carouselToMove.getPosition();
+        if (currentPosition == targetPosition) return;
 
-        if (newPos == -1) { // Deu colisão absoluta de inteiros
-            rebalanceCarousels();
-            moveCarousel(move); // Tenta novamente após reordenar tudo
-            return;
+        List<Carousel> carousels = carouselRepository.findAllByOrderByPositionAsc();
+
+        // Garante que o targetPosition não estoure os limites da lista
+        targetPosition = Math.max(0, Math.min(targetPosition, carousels.size() - 1));
+
+        // Permuta e desloca os carrosséis no caminho
+        if (currentPosition < targetPosition) {
+            // Movendo para baixo/frente: empurra quem está no caminho para trás (subtrai 1)
+            for (Carousel c : carousels) {
+                if (c.getPosition() > currentPosition && c.getPosition() <= targetPosition) {
+                    c.setPosition(c.getPosition() - 1);
+                }
+            }
+        } else {
+            // Movendo para cima/trás: empurra quem está no caminho para frente (soma 1)
+            for (Carousel c : carousels) {
+                if (c.getPosition() >= targetPosition && c.getPosition() < currentPosition) {
+                    c.setPosition(c.getPosition() + 1);
+                }
+            }
         }
 
-        carousel.setPosition(newPos);
-        carouselRepository.save(carousel);
+        carouselToMove.setPosition(targetPosition);
+        carouselRepository.saveAll(carousels); // Salva todo mundo atualizado
     }
 
     @CacheEvict(value = "products", allEntries = true)
     @Transactional
-    public void moveProductInCarousel(UUID carouselId, MoveDTO move) {
-        CarouselProduct relation = carouselProductRepository.findByCarouselIdAndProductId(carouselId, move.id())
+    public void moveProductInCarousel(UUID carouselId, UUID productId, int targetPosition) {
+        CarouselProduct relationToMove = carouselProductRepository.findByCarouselIdAndProductId(carouselId, productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não está no carrossel"));
 
-        int newPos = calculateNewPosition(move.positionBefore(), move.positionAfter());
+        int currentPosition = relationToMove.getPosition();
+        if (currentPosition == targetPosition) return;
 
-        if (newPos == -1) {
-            rebalanceProducts(carouselId);
-            moveProductInCarousel(carouselId, move);
-            return;
+        List<CarouselProduct> currentItems = carouselProductRepository.findAllByCarouselIdOrderByPositionAsc(carouselId);
+
+        // Garante que o targetPosition respeite o tamanho real de itens no carrossel
+        targetPosition = Math.max(0, Math.min(targetPosition, currentItems.size() - 1));
+
+        // Permuta e desloca as relações no caminho
+        if (currentPosition < targetPosition) {
+            // Movendo para baixo/frente: reduz a posição dos intermediários
+            for (CarouselProduct cp : currentItems) {
+                if (cp.getPosition() > currentPosition && cp.getPosition() <= targetPosition) {
+                    cp.setPosition(cp.getPosition() - 1);
+                }
+            }
+        } else {
+            // Movendo para cima/trás: aumenta a posição dos intermediários
+            for (CarouselProduct cp : currentItems) {
+                if (cp.getPosition() >= targetPosition && cp.getPosition() < currentPosition) {
+                    cp.setPosition(cp.getPosition() + 1);
+                }
+            }
         }
 
-        relation.setPosition(newPos);
-        carouselProductRepository.save(relation);
-    }
-
-    private int calculateNewPosition(Integer before, Integer after) {
-        if (before == null && after == null) return GAP;
-        if (before == null) return after / 2;
-        if (after == null) return before + GAP;
-
-        int middle = (before + after) / 2;
-        if (middle == before || middle == after) {
-            return -1; // Sinaliza colisão
-        }
-        return middle;
-    }
-
-    private void rebalanceCarousels() {
-        List<Carousel> carousels = carouselRepository.findAllByOrderByPositionAsc();
-        int pos = GAP;
-        for (Carousel c : carousels) {
-            c.setPosition(pos);
-            pos += GAP;
-        }
-        carouselRepository.saveAll(carousels);
-    }
-
-    private void rebalanceProducts(UUID carouselId) {
-        List<CarouselProduct> relations = carouselProductRepository.findAllByCarouselIdOrderByPositionAsc(carouselId);
-        int pos = GAP;
-        for (CarouselProduct cp : relations) {
-            cp.setPosition(pos);
-            pos += GAP;
-        }
-        carouselProductRepository.saveAll(relations);
+        relationToMove.setPosition(targetPosition);
+        carouselProductRepository.saveAll(currentItems);
     }
 }

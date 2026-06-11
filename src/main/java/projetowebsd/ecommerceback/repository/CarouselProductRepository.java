@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface CarouselProductRepository extends JpaRepository<CarouselProduct, CarouselProductId> {
     Optional<CarouselProduct> findByCarouselIdAndProductId(UUID carouselId, UUID productId);
     List<CarouselProduct> findAllByCarouselIdOrderByPositionAsc(UUID carouselId);
+    long countByCarouselId(UUID carouselId);
 }
