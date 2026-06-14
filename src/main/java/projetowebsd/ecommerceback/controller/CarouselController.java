@@ -10,7 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import projetowebsd.ecommerceback.dto.carousel.*;
 import projetowebsd.ecommerceback.service.CarouselService;
-
+//import projetowebsd.ecommerceback.model.Carousel;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +34,14 @@ public class CarouselController {
         return ResponseEntity.status(HttpStatus.CREATED).body(carouselService.create(request));
     }
 
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Remover um carrossel permanentemente", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        System.out.println("[DELETE] Removendo o carrossel ID: " + id);
+        carouselService.delete(id);
+        return ResponseEntity.noContent().build(); // Retorna 204 No Content (padrão para deleção bem-sucedida sem corpo)
+    }
+
     @PostMapping("/{id}/products/{productId}")
     @Operation(summary = "Adicionar produto ao carrossel", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<Void> addProduct(@PathVariable UUID id, @PathVariable UUID productId) {
@@ -41,12 +49,6 @@ public class CarouselController {
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-    @PatchMapping("/move")
-    @Operation(summary = "Mudar posição global do carrossel na Home", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<Void> moveCarousel(@Valid @RequestBody MoveDTO request) {
-        carouselService.moveCarousel(request.id(), request.targetPosition());
-        return ResponseEntity.noContent().build();
-    }
 
     @PatchMapping("/{id}/products/move")
     @Operation(summary = "Mudar a posição de um produto dentro do carrossel", security = @SecurityRequirement(name = "bearerAuth"))
@@ -54,4 +56,39 @@ public class CarouselController {
         carouselService.moveProductInCarousel(id, request.id(), request.targetPosition());
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/products/bulk")
+    @Operation(
+            summary = "Atualizar lista completa de produtos de um carrossel em lote",
+            description = "Substitui todos os produtos de um carrossel pela lista fornecida, respeitando a ordem do array.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    public ResponseEntity<Void> bulkUpdateCarouselProducts(
+            @PathVariable UUID id,
+            @Valid @RequestBody List<UUID> productIds) {
+
+        System.out.println("[BULK] Atualizando produtos do carrossel " + id + ". Total de itens: " + productIds.size());
+
+        carouselService.updateCarouselProducts(id, productIds);
+
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
+    }
+
+    // Você pode remover o antigo /batch-positions se quiser limpar o código morto
+
+    @PutMapping("/bulk")
+    @Operation(summary = "Salvar e reordenar carrosséis em lote (Bulk)", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<List<CarouselResponseDTO>> bulkSaveCarousels(
+            @Valid @RequestBody List<CarouselBulkRequestDTO> request) {
+
+        System.out.println("[BULK] Recebida carga total de carrosséis para salvar. Itens: " + request.size());
+
+        // O service processa os DTOs e devolve a lista atualizada mapeada para ResponseDTO
+        List<CarouselResponseDTO> saved = carouselService.bulkSave(request);
+
+        System.out.println("[BULK] Estado em lote persistido com sucesso!");
+        return ResponseEntity.ok(saved);
+    }
+
+
 }

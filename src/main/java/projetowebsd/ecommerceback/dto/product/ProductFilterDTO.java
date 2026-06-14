@@ -1,7 +1,6 @@
 package projetowebsd.ecommerceback.dto.product;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-
 import java.math.BigDecimal;
 
 @Schema(description = "Filtros para busca de produtos")
@@ -17,5 +16,8 @@ public record ProductFilterDTO(
         BigDecimal minPrice,
 
         @Schema(description = "Preço máximo", example = "2000.00")
-        BigDecimal maxPrice
+        BigDecimal maxPrice,
+
+        @Schema(description = "Filtrar apenas produtos em promoção", example = "true")
+        Boolean specialOffers
 ) {}

@@ -5,10 +5,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 public class CarouselProductId implements Serializable {
+
+    // Devem ser UUID (o tipo da chave primária de Carousel e Product)
+    // E os nomes devem bater com os atributos da classe CarouselProduct
     private UUID carousel;
     private UUID product;
 
     public CarouselProductId() {}
+
     public CarouselProductId(UUID carousel, UUID product) {
         this.carousel = carousel;
         this.product = product;

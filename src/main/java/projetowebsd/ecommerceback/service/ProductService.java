@@ -18,7 +18,12 @@ import projetowebsd.ecommerceback.exception.ResourceNotFoundException;
 import projetowebsd.ecommerceback.model.Product;
 import projetowebsd.ecommerceback.repository.ProductRepository;
 import projetowebsd.ecommerceback.repository.ReviewRepository;
+import org.springframework.data.domain.Sort;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -30,9 +35,10 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ReviewRepository reviewRepository;
 
-    @Cacheable(value = "products", key = "#filter.toString() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize")
-    public Page<ProductResponseDTO> listWithFilters(ProductFilterDTO filter, Pageable pageable) {
-        Specification<Product> spec = buildSpec(filter);
+    // Atualize a assinatura para aceitar as strings de ordenação
+    @Cacheable(value = "products", key = "#filter.toString() + '-' + #pageable.pageNumber + '-' + #pageable.pageSize + '-' + #sortProperty + '-' + #sortDirection")
+    public Page<ProductResponseDTO> listWithFilters(ProductFilterDTO filter, Pageable pageable, String sortProperty, Sort.Direction sortDirection) {
+        Specification<Product> spec = buildSpec(filter, sortProperty, sortDirection);
         return productRepository.findAll(spec, pageable)
                 .map(p -> ProductResponseDTO.from(p, reviewRepository));
     }
@@ -42,6 +48,66 @@ public class ProductService {
         return ProductResponseDTO.from(getProduct(id), reviewRepository);
     }
 
+    private Specification<Product> buildSpec(ProductFilterDTO filter, String sortProperty, Sort.Direction sortDirection) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("active"), true));
+
+            // --- Filtros convencionais ---
+            if (filter.name() != null && !filter.name().isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + filter.name().toLowerCase() + "%"));
+            }
+            if (filter.category() != null && !filter.category().isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("category")), filter.category().toLowerCase()));
+            }
+            if (filter.minPrice() != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("price"), filter.minPrice()));
+            }
+            if (filter.maxPrice() != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("price"), filter.maxPrice()));
+            }
+
+            // --- Lógica de Ordenação Avançada ---
+            if (sortProperty.equals("salesCount")) {
+                configureSalesSort(root, query, cb, sortDirection);
+            }
+            else if (sortProperty.equals("rating")) {
+                configureRatingSort(root, query, cb, sortDirection);
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    private void configureSalesSort(Root<Product> root, CriteriaQuery<?> query, CriteriaBuilder cb, Sort.Direction direction) {
+        var subquery = query.subquery(Long.class);
+        var orderItemRoot = subquery.from(projetowebsd.ecommerceback.model.OrderItem.class);
+
+        subquery.select(cb.coalesce(cb.sum(orderItemRoot.get("quantity")), 0L));
+        subquery.where(cb.equal(orderItemRoot.get("product"), root));
+
+        if (direction == Sort.Direction.DESC) {
+            query.orderBy(cb.desc(subquery));
+        } else {
+            query.orderBy(cb.asc(subquery));
+        }
+    }
+
+    // Método auxiliar para ordenar pela média das avaliações recebidas
+    private void configureRatingSort(Root<Product> root, CriteriaQuery<?> query, CriteriaBuilder cb, Sort.Direction direction) {
+        // Assume-se que a classe mapeada para a tabela reviews chama-se Review
+        var subquery = query.subquery(Double.class);
+        var reviewRoot = subquery.from(projetowebsd.ecommerceback.model.Review.class); // Altere para o seu pacote correto da classe
+
+        subquery.select(cb.coalesce(cb.avg(reviewRoot.get("rating")), 0.0));
+        subquery.where(cb.equal(reviewRoot.get("product"), root)); // Considerando relacionamento @ManyToOne no Review
+
+        if (direction == Sort.Direction.DESC) {
+            query.orderBy(cb.desc(subquery));
+        } else {
+            query.orderBy(cb.asc(subquery));
+        }
+    }
     @CacheEvict(value = "products", allEntries = true)
     @Transactional
     public ProductResponseDTO create(ProductRequestDTO request) {
@@ -115,6 +181,12 @@ public class ProductService {
             }
             if (filter.maxPrice() != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("price"), filter.maxPrice()));
+            }
+
+            // Exemplo para a regra de Promoções / Descontos (se aplicável ao seu banco)
+            if (filter.specialOffers() != null && filter.specialOffers()) {
+                // Filtra produtos onde o preço promocional não é nulo ou há desconto ativo
+                predicates.add(cb.isNotNull(root.get("promoPrice")));
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));

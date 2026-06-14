@@ -16,9 +16,14 @@ public record CarouselResponseDTO(
         List<ProductResponseDTO> products
 ) {
     public static CarouselResponseDTO from(Carousel carousel, ReviewRepository reviewRepository) {
-        List<ProductResponseDTO> orderedProducts = carousel.getCarouselProducts().stream()
-                .map(cp -> ProductResponseDTO.from(cp.getProduct(), reviewRepository))
-                .toList();
+        // Proteção contra NullPointerException se o carrossel não tiver produtos ainda
+        List<ProductResponseDTO> orderedProducts = List.of();
+
+        if (carousel.getCarouselProducts() != null) {
+            orderedProducts = carousel.getCarouselProducts().stream()
+                    .map(cp -> ProductResponseDTO.from(cp.getProduct(), reviewRepository))
+                    .toList();
+        }
 
         return new CarouselResponseDTO(
                 carousel.getId(),

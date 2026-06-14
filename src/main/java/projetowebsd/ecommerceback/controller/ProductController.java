@@ -30,18 +30,37 @@ public class ProductController {
     private final ProductService productService;
 
     @GetMapping
-    @Operation(summary = "Listar produtos ativos com filtros e paginação")
+    @Operation(summary = "Listar produtos ativos com filtros, paginação e ordenação dinâmica")
     public ResponseEntity<Page<ProductResponseDTO>> list(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) Boolean specialOffers,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "12") int size
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort
     ) {
-        ProductFilterDTO filter = new ProductFilterDTO(name, category, minPrice, maxPrice);
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        return ResponseEntity.ok(productService.listWithFilters(filter, pageable));
+        ProductFilterDTO filter = new ProductFilterDTO(name, category, minPrice, maxPrice, specialOffers);
+
+        String[] sortParams = sort.split(",");
+        String sortProperty = sortParams[0];
+        Sort.Direction sortDirection = (sortParams.length > 1 && sortParams[1].equalsIgnoreCase("asc"))
+                ? Sort.Direction.ASC
+                : Sort.Direction.DESC;
+
+        Pageable pageable;
+
+        // Se for uma ordenação complexa por agregação, delegamos a ordenação para a Specification
+        // e criamos um Pageable comum sem ordenação interna para não quebrar o Hibernate
+        if (sortProperty.equals("salesCount") || sortProperty.equals("rating")) {
+            pageable = PageRequest.of(page, size);
+        } else {
+            pageable = PageRequest.of(page, size, Sort.by(sortDirection, sortProperty));
+        }
+
+        // Passamos a propriedade e direção do sort para o Service processar no buildSpec
+        return ResponseEntity.ok(productService.listWithFilters(filter, pageable, sortProperty, sortDirection));
     }
 
     @GetMapping("/{id}")
